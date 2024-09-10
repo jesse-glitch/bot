@@ -1,0 +1,133 @@
+import discord
+from discord.ext import commands
+import random
+import json
+import os
+
+# Initialize the bot
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Bestandsnaam voor gebruikersgegevens
+DATA_FILE = 'users.json'
+
+# Laden van gebruikersgegevens
+def load_users():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r') as file:
+            return json.load(file)
+    else:
+        return {}
+
+# Opslaan van gebruikersgegevens
+def save_users():
+    with open(DATA_FILE, 'w') as file:
+        json.dump(users, file, indent=4)
+
+# Initialiseren van gebruikersgegevens vanuit het bestand
+users = load_users()
+
+# Een eenvoudige winkel met items
+shop_items = {
+    'sword': {'price': 100, 'description': 'Een krachtig zwaard.'},
+    'shield': {'price': 150, 'description': 'Een stevig schild voor bescherming.'},
+    'potion': {'price': 50, 'description': 'Een genezingsdrankje.'},
+}
+
+# Helperfunctie om een gebruiker toe te voegen als ze nog geen saldo of inventaris hebben
+def add_user(user):
+    if user not in users:
+        users[user] = {
+            'saldo': 100,  # Startsaldo van 100 munten
+            'inventory': []  # Lege inventaris
+        }
+        save_users()  # Opslaan nadat de gebruiker is toegevoegd
+
+# Commando om het saldo van een gebruiker te checken
+@bot.command(name='saldo')
+async def saldo(ctx):
+    user = str(ctx.author)
+    add_user(user)
+    await ctx.send(f'{ctx.author.mention}, je hebt {users[user]["saldo"]} munten.')
+
+# Commando om geld te verdienen door te werken
+@bot.command(name='werk')
+async def werk(ctx):
+    user = str(ctx.author)
+    add_user(user)
+    
+    # Random bedrag dat de gebruiker kan verdienen
+    salaris = random.randint(10, 50)
+    users[user]['saldo'] += salaris
+    save_users()  # Opslaan na het verdienen van geld
+    await ctx.send(f'{ctx.author.mention}, je hebt gewerkt en {salaris} munten verdiend!')
+
+# Commando om geld uit te geven
+@bot.command(name='uitgeven')
+async def uitgeven(ctx, bedrag: int):
+    user = str(ctx.author)
+    add_user(user)
+    
+    if bedrag <= 0:
+        await ctx.send(f'{ctx.author.mention}, je kunt geen negatief bedrag uitgeven.')
+        return
+
+    if users[user]['saldo'] >= bedrag:
+        users[user]['saldo'] -= bedrag
+        save_users()  # Opslaan na het uitgeven van geld
+        await ctx.send(f'{ctx.author.mention}, je hebt {bedrag} munten uitgegeven. Je hebt nu {users[user]["saldo"]} munten over.')
+    else:
+        await ctx.send(f'{ctx.author.mention}, je hebt niet genoeg munten om {bedrag} uit te geven. Je saldo is {users[user]["saldo"]}.')
+
+# Commando om de winkel te bekijken
+@bot.command(name='shop')
+async def shop(ctx):
+    shop_message = "**Welkom in de winkel!**\n"
+    for item, details in shop_items.items():
+        shop_message += f'- **{item.capitalize()}**: {details["price"]} munten - {details["description"]}\n'
+    await ctx.send(shop_message)
+
+# Commando om een item te kopen
+@bot.command(name='buy')
+async def buy(ctx, item: str):
+    user = str(ctx.author)
+    add_user(user)
+    
+    item = item.lower()
+    if item not in shop_items:
+        await ctx.send(f'{ctx.author.mention}, dat item is niet beschikbaar in de winkel.')
+        return
+    
+    item_price = shop_items[item]['price']
+    if users[user]['saldo'] >= item_price:
+        users[user]['saldo'] -= item_price
+        users[user]['inventory'].append(item)
+        save_users()  # Opslaan na aankoop van item
+        await ctx.send(f'{ctx.author.mention}, je hebt een **{item.capitalize()}** gekocht voor {item_price} munten! Je hebt nu {users[user]["saldo"]} munten over.')
+    else:
+        await ctx.send(f'{ctx.author.mention}, je hebt niet genoeg munten om {item.capitalize()} te kopen. Je saldo is {users[user]["saldo"]}.')
+
+# Commando om de inventaris van een gebruiker te bekijken
+@bot.command(name='inventaris')
+async def inventaris(ctx):
+    user = str(ctx.author)
+    add_user(user)
+    
+    inventory = users[user]['inventory']
+    if inventory:
+        inventory_message = f"{ctx.author.mention}, je hebt de volgende items in je inventaris:\n"
+        for item in inventory:
+            inventory_message += f'- {item.capitalize()}\n'
+    else:
+        inventory_message = f"{ctx.author.mention}, je inventaris is leeg."
+    
+    await ctx.send(inventory_message)
+
+# Event wanneer de bot online gaat
+@bot.event
+async def on_ready():
+    print(f'{bot.user} is nu online!')
+
+# Start de bot
+bot.run('JOUW_BOT_TOKEN_HIER')
